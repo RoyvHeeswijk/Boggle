@@ -30,11 +30,10 @@ export default function JoinScreen() {
   const isOnline = !useMockTransport;
 
   useEffect(() => {
-    if (!started) return;
     if (phase === 'countdown') {
       router.replace('/countdown');
     }
-  }, [phase, started]);
+  }, [phase]);
 
   const handleJoin = async () => {
     if (isOnline && code.trim().length < 4) {

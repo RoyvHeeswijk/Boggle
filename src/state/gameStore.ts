@@ -56,6 +56,8 @@ interface GameStore {
     options?: { mode?: TransportMode; roomCode?: string },
   ) => Promise<void>;
   connectToPeer: (peerId: string) => Promise<void>;
+  updateSettings: (settings: GameSettings) => Promise<void>;
+  returnToLobby: () => Promise<void>;
   startGame: () => Promise<void>;
   handleMessage: (type: string, payload: unknown) => Promise<void>;
   submitWord: (word: string) => void;
@@ -194,6 +196,46 @@ export const useGameStore = create<GameStore>((set, get) => ({
     await transport.connect(peerId);
   },
 
+  updateSettings: async (settings) => {
+    const { transport, role } = get();
+    set({ settings, secondsRemaining: settings.durationSeconds });
+
+    if (transport && role === 'host') {
+      await transport.send('lobby_settings', {
+        ...settings,
+        hostId: get().localPlayerId,
+        hostName: get().localPlayerName,
+      });
+    }
+  },
+
+  returnToLobby: async () => {
+    const { transport, role } = get();
+    if (role !== 'host') return;
+
+    if (transport) {
+      await transport.send('return_lobby', {});
+    }
+
+    set({
+      phase: 'waiting',
+      board: null,
+      seed: null,
+      matchId: null,
+      startTimestamp: null,
+      endTimestamp: null,
+      foundWords: [],
+      currentPath: [],
+      currentInput: '',
+      remoteWords: null,
+      matchResult: null,
+      eloChange: null,
+      newAchievements: [],
+      newRecords: [],
+      secondsRemaining: get().settings.durationSeconds,
+    });
+  },
+
   startGame: async () => {
     const { transport, settings, role } = get();
     if (!transport || role !== 'host') return;
@@ -270,6 +312,26 @@ export const useGameStore = create<GameStore>((set, get) => ({
           endTimestamp: p.startTimestamp + state.settings.durationSeconds * 1000,
           phase: 'countdown',
           foundWords: [],
+          remoteWords: null,
+          matchResult: null,
+          eloChange: null,
+          newAchievements: [],
+          newRecords: [],
+          secondsRemaining: state.settings.durationSeconds,
+        });
+        break;
+      }
+      case 'return_lobby': {
+        set({
+          phase: 'waiting',
+          board: null,
+          seed: null,
+          matchId: null,
+          startTimestamp: null,
+          endTimestamp: null,
+          foundWords: [],
+          currentPath: [],
+          currentInput: '',
           remoteWords: null,
           matchResult: null,
           eloChange: null,

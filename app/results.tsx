@@ -41,8 +41,16 @@ export default function ResultsScreen() {
   const eloChange = useGameStore((s) => s.eloChange);
   const newAchievements = useGameStore((s) => s.newAchievements);
   const newRecords = useGameStore((s) => s.newRecords);
+  const phase = useGameStore((s) => s.phase);
   const rematch = useGameStore((s) => s.rematch);
+  const returnToLobby = useGameStore((s) => s.returnToLobby);
   const cleanup = useGameStore((s) => s.cleanup);
+
+  useEffect(() => {
+    if (phase === 'waiting') {
+      router.replace(role === 'host' ? '/host' : '/join');
+    }
+  }, [phase, role]);
 
   const [skipped, setSkipped] = useState(false);
   const stage = useReveal(skipped);
@@ -94,6 +102,10 @@ export default function ResultsScreen() {
       await rematch();
       router.replace('/countdown');
     }
+  };
+
+  const handleReturnLobby = async () => {
+    await returnToLobby();
   };
 
   const handleMenu = async () => {
@@ -256,7 +268,14 @@ export default function ResultsScreen() {
         {/* Kaart 6 - Acties (sticky, duimbereik) */}
         <View style={styles.footer}>
           {role === 'host' && <Button title="Nog een ronde" onPress={handleRematch} />}
-          <Button title="Terug naar hoofdmenu" variant="secondary" onPress={handleMenu} />
+          {role === 'host' && (
+            <Button title="Terug naar lobby" variant="secondary" onPress={handleReturnLobby} />
+          )}
+          <Button
+            title="Terug naar hoofdmenu"
+            variant={role === 'host' ? 'ghost' : 'secondary'}
+            onPress={handleMenu}
+          />
         </View>
       </Pressable>
     </Screen>

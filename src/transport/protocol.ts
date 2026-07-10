@@ -7,6 +7,7 @@ export type MessageType =
   | 'start_game'
   | 'words_submit'
   | 'rematch'
+  | 'return_lobby'
   | 'disconnect'
   | 'ping'
   | 'pong';
