@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { StyleSheet, Text, View, FlatList, Alert } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import * as Haptics from 'expo-haptics';
 import { Screen } from '@/src/ui/components/Screen';
@@ -23,10 +23,11 @@ export default function GameScreen() {
   const phase = useGameStore((s) => s.phase);
   const setCurrentPath = useGameStore((s) => s.setCurrentPath);
   const submitWord = useGameStore((s) => s.submitWord);
-  const endGame = useGameStore((s) => s.endGame);
+  const clearSelection = useGameStore((s) => s.clearSelection);
 
   const [dictionary, setDictionary] = useState<Dictionary | null>(null);
-  const [feedback, setFeedback] = useState<string | null>(null);
+  const [feedback, setFeedback] = useState<{ text: string; ok: boolean } | null>(null);
+  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     loadDictionary().then(setDictionary);
@@ -38,29 +39,40 @@ export default function GameScreen() {
     }
   }, [phase]);
 
-  const handleWordComplete = useCallback(async () => {
-    if (!dictionary || !board || currentInput.length < 3) return;
+  const showFeedback = useCallback((text: string, ok: boolean) => {
+    setFeedback({ text, ok });
+    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
+    feedbackTimer.current = setTimeout(() => setFeedback(null), 1200);
+  }, []);
 
-    const result = validateWordInput(currentInput, board, dictionary, foundWords);
+  const handleWordComplete = useCallback(() => {
+    const input = useGameStore.getState().currentInput;
+
+    // Too short / accidental tap: just clear, no noise.
+    if (!dictionary || !board || input.length < 3) {
+      clearSelection();
+      return;
+    }
+
+    const result = validateWordInput(input, board, dictionary, foundWords);
 
     if (result.valid) {
       submitWord(result.word);
-      setFeedback(`+${result.points} ${result.word}`);
+      showFeedback(`+${result.points}  ${result.word}`, true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } else {
       const messages: Record<string, string> = {
         too_short: 'Minimaal 3 letters',
-        not_in_dictionary: 'Woord niet gevonden',
+        not_in_dictionary: 'Bestaat niet',
         not_on_board: 'Niet op het bord',
         already_found: 'Al gevonden',
-        invalid: 'Ongeldig woord',
+        invalid: 'Ongeldig',
       };
-      setFeedback(messages[result.reason] ?? 'Ongeldig');
+      showFeedback(messages[result.reason] ?? 'Ongeldig', false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      clearSelection();
     }
-
-    setTimeout(() => setFeedback(null), 1500);
-  }, [dictionary, board, currentInput, foundWords, submitWord]);
+  }, [dictionary, board, foundWords, submitWord, clearSelection, showFeedback]);
 
   if (!board) {
     router.replace('/');
@@ -71,69 +83,77 @@ export default function GameScreen() {
 
   return (
     <Screen>
-      <View style={styles.header}>
-        <TimerDisplay
-          secondsRemaining={secondsRemaining}
-          totalSeconds={settings.durationSeconds}
-        />
-        <View style={styles.stats}>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: accent.primary }]}>{score}</Text>
-            <Text style={[styles.statLabel, { color: palette.textSecondary }]}>Score</Text>
-          </View>
-          <View style={styles.stat}>
-            <Text style={[styles.statValue, { color: palette.text }]}>{foundWords.length}</Text>
-            <Text style={[styles.statLabel, { color: palette.textSecondary }]}>Woorden</Text>
+      <View style={styles.root}>
+        <View style={styles.header}>
+          <TimerDisplay
+            secondsRemaining={secondsRemaining}
+            totalSeconds={settings.durationSeconds}
+          />
+          <View style={styles.stats}>
+            <View style={styles.stat}>
+              <Text style={[styles.statValue, { color: accent.primary }]}>{score}</Text>
+              <Text style={[styles.statLabel, { color: palette.textSecondary }]}>Score</Text>
+            </View>
+            <View style={[styles.divider, { backgroundColor: palette.border }]} />
+            <View style={styles.stat}>
+              <Text style={[styles.statValue, { color: palette.text }]}>{foundWords.length}</Text>
+              <Text style={[styles.statLabel, { color: palette.textSecondary }]}>Woorden</Text>
+            </View>
           </View>
         </View>
-      </View>
 
-      <View style={[styles.currentWord, { backgroundColor: accent.light }]}>
-        <Text style={[styles.currentWordText, { color: accent.dark }]}>
-          {currentInput || ' '}
-        </Text>
-        {feedback && (
-          <Text style={[styles.feedback, { color: feedback.startsWith('+') ? accent.primary : palette.error }]}>
-            {feedback}
-          </Text>
-        )}
-      </View>
-
-      <BoggleBoard
-        board={board}
-        selectedPath={currentPath}
-        onPathChange={setCurrentPath}
-        onWordComplete={handleWordComplete}
-        disabled={phase !== 'playing'}
-      />
-
-      <View style={[styles.wordList, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <Text style={[styles.wordListTitle, { color: palette.textSecondary }]}>
-          Gevonden woorden
-        </Text>
-        <FlatList
-          data={[...foundWords].reverse()}
-          keyExtractor={(item, index) => `${item}-${index}`}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.wordListContent}
-          renderItem={({ item }) => (
-            <View style={[styles.wordChip, { backgroundColor: accent.light }]}>
-              <Text style={[styles.wordChipText, { color: accent.dark }]}>{item}</Text>
-            </View>
-          )}
-          ListEmptyComponent={
-            <Text style={[styles.empty, { color: palette.textMuted }]}>
-              Swipe over letters om woorden te vormen
+        <View style={styles.wordBarWrap}>
+          <View
+            style={[
+              styles.currentWord,
+              {
+                backgroundColor:
+                  feedback && !feedback.ok
+                    ? palette.surface
+                    : feedback || currentInput
+                      ? accent.light
+                      : 'transparent',
+                borderWidth: feedback && !feedback.ok ? 2 : 0,
+                borderColor: palette.error,
+              },
+            ]}
+          >
+            <Text
+              style={[
+                styles.currentWordText,
+                {
+                  color: feedback
+                    ? feedback.ok
+                      ? accent.dark
+                      : palette.error
+                    : accent.dark,
+                },
+              ]}
+              numberOfLines={1}
+            >
+              {feedback ? feedback.text : currentInput || 'Sleep over de letters'}
             </Text>
-          }
-        />
+          </View>
+        </View>
+
+        <View style={styles.boardWrap}>
+          <BoggleBoard
+            board={board}
+            selectedPath={currentPath}
+            onPathChange={setCurrentPath}
+            onWordComplete={handleWordComplete}
+            disabled={phase !== 'playing'}
+          />
+        </View>
       </View>
     </Screen>
   );
 }
 
 const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+  },
   header: {
     gap: spacing.md,
     marginBottom: spacing.md,
@@ -141,58 +161,46 @@ const styles = StyleSheet.create({
   stats: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: spacing.xxl,
+    alignItems: 'center',
+    gap: spacing.xl,
+  },
+  divider: {
+    width: 1,
+    height: 36,
   },
   stat: {
     alignItems: 'center',
+    minWidth: 72,
   },
   statValue: {
-    ...typography.heading,
+    ...typography.title,
   },
   statLabel: {
     ...typography.caption,
   },
+  wordBarWrap: {
+    height: 64,
+    justifyContent: 'center',
+    marginBottom: spacing.sm,
+  },
   currentWord: {
+    alignSelf: 'center',
+    minHeight: 52,
+    minWidth: 200,
+    maxWidth: '100%',
+    justifyContent: 'center',
     alignItems: 'center',
-    minHeight: 48,
-    marginBottom: spacing.md,
     paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: radius.xl,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.full,
   },
   currentWordText: {
     ...typography.heading,
-    letterSpacing: 6,
+    letterSpacing: 4,
     fontWeight: '800',
   },
-  feedback: {
-    ...typography.caption,
-    marginTop: spacing.xs,
-  },
-  wordList: {
-    marginTop: spacing.lg,
-    borderRadius: radius.xl,
-    borderWidth: 1,
-    padding: spacing.md,
-    maxHeight: 88,
-  },
-  wordListTitle: {
-    ...typography.small,
-    marginBottom: spacing.sm,
-  },
-  wordListContent: {
-    gap: spacing.sm,
-  },
-  wordChip: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.full,
-  },
-  wordChipText: {
-    ...typography.caption,
-    fontWeight: '600',
-  },
-  empty: {
-    ...typography.caption,
+  boardWrap: {
+    flex: 1,
+    justifyContent: 'center',
   },
 });

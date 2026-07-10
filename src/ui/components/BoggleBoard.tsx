@@ -130,7 +130,7 @@ export function BoggleBoard({
 }: BoggleBoardProps) {
   const { palette, accent } = useTheme();
   const size = board.length;
-  const [geo, setGeo] = useState<GridGeometry>({ width: 0, cellSize: 0, gap: spacing.sm });
+  const [geo, setGeo] = useState<GridGeometry>({ width: 0, cellSize: 0, gap: spacing.md });
   const selectedPathRef = useRef(selectedPath);
 
   useEffect(() => {
@@ -143,14 +143,11 @@ export function BoggleBoard({
       if (width <= 0 || cellSize <= 0) return null;
 
       const step = cellSize + gap;
-      const col = Math.floor(x / step);
-      const row = Math.floor(y / step);
-
-      if (row < 0 || row >= size || col < 0 || col >= size) return null;
-
-      const localX = x - col * step;
-      const localY = y - row * step;
-      if (localX > cellSize || localY > cellSize) return null;
+      // Snap to the nearest cell (gutters included) so diagonal swipes are
+      // forgiving and never fall into a dead zone between tiles.
+      const clamp = (v: number) => Math.min(size - 1, Math.max(0, v));
+      const col = clamp(Math.floor(x / step));
+      const row = clamp(Math.floor(y / step));
 
       const cell = { row, col };
       return isValidCell(cell, size as 4 | 5) ? cell : null;
@@ -197,10 +194,9 @@ export function BoggleBoard({
       }
     })
     .onEnd(() => {
-      if (selectedPathRef.current.length >= 3) {
-        onWordComplete();
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      }
+      // Always hand control back to the parent on release; it validates and
+      // clears the selection so tiles never stay highlighted.
+      onWordComplete();
     });
 
   const connectionLines = useMemo(() => {
@@ -223,7 +219,7 @@ export function BoggleBoard({
         style={styles.container}
         onLayout={(e: LayoutChangeEvent) => {
           const width = e.nativeEvent.layout.width;
-          const gap = spacing.sm;
+          const gap = spacing.md;
           const cellSize = (width - gap * (size - 1)) / size;
           setGeo({ width, cellSize, gap });
         }}
@@ -259,7 +255,7 @@ const styles = StyleSheet.create({
     aspectRatio: 1,
     width: '100%',
     position: 'relative',
-    gap: spacing.sm,
+    gap: spacing.md,
   },
   row: {
     flexDirection: 'row',
