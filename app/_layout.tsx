@@ -1,56 +1,60 @@
-import { useFonts } from 'expo-font';
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import React, { useEffect } from 'react';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
-import 'react-native-reanimated';
+import { StatusBar } from 'expo-status-bar';
+import { useTheme } from '@/src/ui/hooks/useTheme';
+import { useSettingsStore } from '@/src/state/settingsStore';
+import { getDatabase } from '@/src/data/db';
+import { getOrCreateProfile } from '@/src/data/repositories/matchRepository';
 
-import { useColorScheme } from '@/components/useColorScheme';
-
-export {
-  // Catch any errors thrown by the Layout component.
-  ErrorBoundary,
-} from 'expo-router';
-
-export const unstable_settings = {
-  // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
-};
-
-// Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 export default function RootLayout() {
-  const [loaded, error] = useFonts({
-    SpaceMono: require('../assets/fonts/SpaceMono-Regular.ttf'),
-  });
-
-  // Expo Router uses Error Boundaries to catch errors in the navigation tree.
-  useEffect(() => {
-    if (error) throw error;
-  }, [error]);
+  const { isDark, palette } = useTheme();
+  const hydrate = useSettingsStore((s) => s.hydrate);
+  const hydrated = useSettingsStore((s) => s.hydrated);
+  const playerName = useSettingsStore((s) => s.playerName);
+  const setPlayerId = useSettingsStore((s) => s.setPlayerId);
 
   useEffect(() => {
-    if (loaded) {
+    async function init() {
+      getDatabase();
+      await hydrate();
       SplashScreen.hideAsync();
     }
-  }, [loaded]);
+    init();
+  }, [hydrate]);
 
-  if (!loaded) {
-    return null;
-  }
+  useEffect(() => {
+    if (hydrated && playerName) {
+      getOrCreateProfile(playerName).then((profile) => {
+        setPlayerId(profile.id);
+      });
+    }
+  }, [hydrated, playerName, setPlayerId]);
 
-  return <RootLayoutNav />;
-}
-
-function RootLayoutNav() {
-  const colorScheme = useColorScheme();
+  if (!hydrated) return null;
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor: palette.background }}>
+      <StatusBar style={isDark ? 'light' : 'dark'} />
+      <Stack
+        screenOptions={{
+          headerShown: false,
+          contentStyle: { backgroundColor: palette.background },
+          animation: 'slide_from_right',
+        }}
+      >
+        <Stack.Screen name="index" />
+        <Stack.Screen name="host" />
+        <Stack.Screen name="join" />
+        <Stack.Screen name="countdown" />
+        <Stack.Screen name="game" />
+        <Stack.Screen name="results" />
+        <Stack.Screen name="profile" />
+        <Stack.Screen name="settings" />
       </Stack>
-    </ThemeProvider>
+    </GestureHandlerRootView>
   );
 }
