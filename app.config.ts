@@ -73,5 +73,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
     eas: {
       projectId: 'boggle-duel-project',
     },
+    supabaseUrl: process.env.EXPO_PUBLIC_SUPABASE_URL ?? 'https://txpurcygggkslnpkaxol.supabase.co',
+    supabaseAnonKey:
+      process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY ?? 'sb_publishable_unSaOO4N4VntWaiFrVtA5Q_oXLOkgM-',
   },
 });

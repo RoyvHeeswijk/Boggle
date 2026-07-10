@@ -25,6 +25,7 @@ export default function HostScreen() {
 
   const phase = useGameStore((s) => s.phase);
   const remotePlayerName = useGameStore((s) => s.remotePlayerName);
+  const roomCode = useGameStore((s) => s.roomCode);
   const initHost = useGameStore((s) => s.initHost);
   const startGame = useGameStore((s) => s.startGame);
   const cleanup = useGameStore((s) => s.cleanup);
@@ -40,10 +41,10 @@ export default function HostScreen() {
         playerName,
         id,
         { boardSize, durationSeconds: effectiveDuration, language: 'nl' },
-        useMockTransport,
+        { mode: useMockTransport ? 'mock' : 'online' },
       );
     } catch (e) {
-      Alert.alert('Fout', 'Kon lobby niet aanmaken. Probeer opnieuw.');
+      Alert.alert('Fout', 'Kon lobby niet aanmaken. Controleer je internetverbinding en probeer opnieuw.');
     } finally {
       setLoading(false);
     }
@@ -67,6 +68,18 @@ export default function HostScreen() {
             Bord: {boardSize}×{boardSize} · {formatDuration(effectiveDuration)} · Nederlands
           </Text>
         </Card>
+
+        {roomCode && phase === 'lobby' && (
+          <View style={[styles.codeCard, { backgroundColor: accent.light, borderColor: accent.primary }]}>
+            <Text style={[styles.codeLabel, { color: accent.dark }]}>
+              Deel deze code met je tegenstander
+            </Text>
+            <Text style={[styles.codeValue, { color: accent.dark }]}>{roomCode}</Text>
+            <Text style={[styles.codeHint, { color: accent.dark }]}>
+              Zij kiezen "Join Game" en vullen deze code in.
+            </Text>
+          </View>
+        )}
 
         <View style={styles.waitingArea}>
           {phase === 'waiting' ? (
@@ -161,6 +174,29 @@ const styles = StyleSheet.create({
   actions: {
     marginTop: 'auto',
     gap: spacing.md,
+  },
+  codeCard: {
+    marginTop: spacing.md,
+    padding: spacing.lg,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  codeLabel: {
+    ...typography.caption,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  codeValue: {
+    fontSize: 44,
+    fontWeight: '800',
+    letterSpacing: 8,
+  },
+  codeHint: {
+    ...typography.small,
+    textAlign: 'center',
+    opacity: 0.8,
   },
   waitingArea: {
     flex: 1,

@@ -514,3 +514,8 @@ export async function getTopWords(profileId: string, limit = 20) {
     .orderBy(desc(wordStats.timesFound))
     .limit(limit);
 }
+
+/** No-op on native; the web implementation preloads the AsyncStorage-backed store. */
+export async function initWebStorage(): Promise<void> {
+  // native uses SQLite which initializes lazily via getDatabase()
+}

@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, ActivityIndicator, Alert } from 'react-native';
+import { StyleSheet, Text, View, ActivityIndicator, Alert, TextInput } from 'react-native';
 import { router } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { Screen } from '@/src/ui/components/Screen';
 import { Button } from '@/src/ui/components/Button';
 import { Card, StatRow } from '@/src/ui/components/Card';
 import { useTheme } from '@/src/ui/hooks/useTheme';
-import { spacing, typography } from '@/src/ui/theme';
+import { spacing, typography, radius } from '@/src/ui/theme';
 import { useSettingsStore } from '@/src/state/settingsStore';
 import { useGameStore } from '@/src/state/gameStore';
 import { formatDuration } from '@/src/core/game/types';
@@ -23,25 +23,35 @@ export default function JoinScreen() {
   const initGuest = useGameStore((s) => s.initGuest);
   const cleanup = useGameStore((s) => s.cleanup);
 
+  const [code, setCode] = useState('');
   const [searching, setSearching] = useState(false);
   const [started, setStarted] = useState(false);
 
+  const isOnline = !useMockTransport;
+
   useEffect(() => {
     if (!started) return;
-
     if (phase === 'countdown') {
       router.replace('/countdown');
     }
   }, [phase, started]);
 
   const handleJoin = async () => {
+    if (isOnline && code.trim().length < 4) {
+      Alert.alert('Code vereist', 'Vul de code in die de host met je heeft gedeeld.');
+      return;
+    }
     setSearching(true);
     try {
       const id = playerId ?? Crypto.randomUUID();
-      await initGuest(playerName, id, useMockTransport);
+      await initGuest(playerName, id, {
+        mode: useMockTransport ? 'mock' : 'online',
+        roomCode: code.trim().toUpperCase(),
+      });
       setStarted(true);
     } catch (e) {
-      Alert.alert('Fout', 'Kon niet verbinden. Zorg dat de host een lobby heeft aangemaakt.');
+      Alert.alert('Fout', 'Kon niet verbinden. Controleer de code en je internetverbinding.');
+      setStarted(false);
     } finally {
       setSearching(false);
     }
@@ -52,13 +62,15 @@ export default function JoinScreen() {
     router.back();
   };
 
+  const connecting = searching || (started && phase === 'lobby');
+
   return (
-    <Screen title="Join Game" subtitle="Zoek naar nearby hosts">
-      {searching || (started && phase === 'lobby') ? (
+    <Screen title="Join Game" subtitle={isOnline ? 'Vul de code van de host in' : 'Zoek naar nearby hosts'}>
+      {connecting ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={accent.primary} />
           <Text style={[styles.searchText, { color: palette.textSecondary }]}>
-            Zoeken naar hosts...
+            {isOnline ? 'Verbinden met ' + code.toUpperCase() + '...' : 'Zoeken naar hosts...'}
           </Text>
         </View>
       ) : phase === 'waiting' ? (
@@ -75,10 +87,34 @@ export default function JoinScreen() {
         </View>
       ) : (
         <View style={styles.center}>
-          <Text style={[styles.info, { color: palette.textSecondary }]}>
-            De app zoekt automatisch naar beschikbare hosts in de buurt via Multipeer Connectivity.
-          </Text>
-          <Button title="Zoek hosts" onPress={handleJoin} />
+          {isOnline ? (
+            <>
+              <Text style={[styles.info, { color: palette.textSecondary }]}>
+                Vul de code in die de host met je heeft gedeeld om op afstand tegen elkaar te spelen.
+              </Text>
+              <TextInput
+                style={[
+                  styles.codeInput,
+                  { color: palette.text, borderColor: accent.primary, backgroundColor: palette.surface },
+                ]}
+                placeholder="CODE"
+                placeholderTextColor={palette.textMuted}
+                autoCapitalize="characters"
+                autoCorrect={false}
+                maxLength={6}
+                value={code}
+                onChangeText={(t) => setCode(t.toUpperCase())}
+              />
+              <Button title="Verbinden" onPress={handleJoin} />
+            </>
+          ) : (
+            <>
+              <Text style={[styles.info, { color: palette.textSecondary }]}>
+                De app zoekt automatisch naar beschikbare hosts in de buurt via Multipeer Connectivity.
+              </Text>
+              <Button title="Zoek hosts" onPress={handleJoin} />
+            </>
+          )}
         </View>
       )}
 
@@ -109,5 +145,14 @@ const styles = StyleSheet.create({
     ...typography.body,
     textAlign: 'center',
     lineHeight: 24,
+  },
+  codeInput: {
+    borderWidth: 2,
+    borderRadius: radius.lg,
+    paddingVertical: spacing.md,
+    textAlign: 'center',
+    fontSize: 36,
+    fontWeight: '800',
+    letterSpacing: 8,
   },
 });

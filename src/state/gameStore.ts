@@ -8,7 +8,7 @@ import type {
   CellPosition,
 } from '../core/game/types';
 import type { Transport } from '../transport/protocol';
-import { createTransport } from '../transport';
+import { createTransport, generateRoomCode, type TransportMode } from '../transport';
 import { generateSeed, generateBoard } from '../core/board/generator';
 import { generatePlayableBoard } from '../core/board/solver';
 import { loadDictionary } from '../core/dictionary/dictionary';
@@ -27,6 +27,7 @@ interface GameStore {
   startTimestamp: number | null;
   localPlayerId: string;
   localPlayerName: string;
+  roomCode: string | null;
   remotePlayerId: string | null;
   remotePlayerName: string | null;
   foundWords: string[];
@@ -40,8 +41,17 @@ interface GameStore {
   newAchievements: string[];
   error: string | null;
 
-  initHost: (playerName: string, playerId: string, settings: GameSettings, useMock?: boolean) => Promise<void>;
-  initGuest: (playerName: string, playerId: string, useMock?: boolean) => Promise<void>;
+  initHost: (
+    playerName: string,
+    playerId: string,
+    settings: GameSettings,
+    options?: { mode?: TransportMode; roomCode?: string },
+  ) => Promise<void>;
+  initGuest: (
+    playerName: string,
+    playerId: string,
+    options?: { mode?: TransportMode; roomCode?: string },
+  ) => Promise<void>;
   connectToPeer: (peerId: string) => Promise<void>;
   startGame: () => Promise<void>;
   handleMessage: (type: string, payload: unknown) => Promise<void>;
@@ -72,6 +82,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   startTimestamp: null,
   localPlayerId: '',
   localPlayerName: '',
+  roomCode: null,
   remotePlayerId: null,
   remotePlayerName: null,
   foundWords: [],
@@ -85,8 +96,15 @@ export const useGameStore = create<GameStore>((set, get) => ({
   newAchievements: [],
   error: null,
 
-  initHost: async (playerName, playerId, settings, useMock = false) => {
-    const transport = createTransport('host', playerId, playerName, useMock);
+  initHost: async (playerName, playerId, settings, options = {}) => {
+    const mode = options.mode ?? 'online';
+    const roomCode =
+      mode === 'online' ? (options.roomCode ?? generateRoomCode()) : null;
+
+    const transport = createTransport('host', playerId, playerName, {
+      mode,
+      roomCode: roomCode ?? undefined,
+    });
     await transport.start();
     await transport.advertise(settings);
 
@@ -109,20 +127,32 @@ export const useGameStore = create<GameStore>((set, get) => ({
       role: 'host',
       phase: 'lobby',
       settings,
+      roomCode,
       localPlayerId: playerId,
       localPlayerName: playerName,
       secondsRemaining: settings.durationSeconds,
     });
   },
 
-  initGuest: async (playerName, playerId, useMock = false) => {
-    const transport = createTransport('guest', playerId, playerName, useMock);
+  initGuest: async (playerName, playerId, options = {}) => {
+    const mode = options.mode ?? 'online';
+    const roomCode = options.roomCode ?? null;
+
+    const transport = createTransport('guest', playerId, playerName, {
+      mode,
+      roomCode: roomCode ?? undefined,
+    });
     await transport.start();
-    await transport.discover();
+
+    if (mode === 'online') {
+      await transport.connect(roomCode ?? '');
+    } else {
+      await transport.discover();
+    }
 
     const unsubscribers = [
       transport.on('onPeerFound', async (peer) => {
-        if (peer.metadata?.role === 'host' || get().role === 'guest') {
+        if (mode !== 'online' && (peer.metadata?.role === 'host' || get().role === 'guest')) {
           try {
             await transport.connect(peer.id);
           } catch {
@@ -147,6 +177,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       transport,
       role: 'guest',
       phase: 'lobby',
+      roomCode,
       localPlayerId: playerId,
       localPlayerName: playerName,
     });
@@ -356,6 +387,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seed: null,
       matchId: null,
       startTimestamp: null,
+      roomCode: null,
       remotePlayerId: null,
       remotePlayerName: null,
       foundWords: [],

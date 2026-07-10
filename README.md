@@ -82,7 +82,14 @@ Or via CLI after `vercel login`:
 vercel deploy --prod
 ```
 
-**Note:** The web version uses mock transport (no Multipeer). For real iPhone multiplayer, use the EAS iOS build.
+**Online remote play:** The web and native builds support online multiplayer via a room code, powered by Supabase Realtime. The host creates a room and shares the code; the other player enters it under "Join Game" to play remotely over the internet. On native you can additionally use local Multipeer (nearby) play.
+
+Configure via env vars (optional, defaults are baked in):
+
+```
+EXPO_PUBLIC_SUPABASE_URL=...
+EXPO_PUBLIC_SUPABASE_ANON_KEY=...
+```
 
 
 - Expo 57 + React Native + TypeScript
