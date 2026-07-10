@@ -1,46 +1,80 @@
-import React, { useEffect, useState } from 'react';
-import { StyleSheet, Text, View, ScrollView, FlatList } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { StyleSheet, Text, View, ScrollView, Pressable } from 'react-native';
 import { router } from 'expo-router';
-import Animated, { FadeInDown, ZoomIn } from 'react-native-reanimated';
+import Animated, { FadeIn, FadeInDown, ZoomIn } from 'react-native-reanimated';
 import { Screen } from '@/src/ui/components/Screen';
 import { Button } from '@/src/ui/components/Button';
-import { Card, StatRow } from '@/src/ui/components/Card';
+import { CountUp } from '@/src/ui/components/CountUp';
 import { useTheme } from '@/src/ui/hooks/useTheme';
 import { spacing, typography, radius, shadows } from '@/src/ui/theme';
 import { useGameStore } from '@/src/state/gameStore';
 import { useSettingsStore } from '@/src/state/settingsStore';
 import { getAchievementById } from '@/src/core/achievements/achievements';
-import { loadDictionary } from '@/src/core/dictionary/dictionary';
-import { solveBoard } from '@/src/core/board/solver';
+import { buildWordRows, buildPlayerSummary, type WordRow } from '@/src/core/game/results';
+
+const STAGE_DELAYS = [0, 500, 1100, 1900, 2500, 3100];
+const STAGE = { WINNER: 1, SUMMARY: 2, WORDS: 3, RECORDS: 4, ACHIEVEMENTS: 5, DONE: 6 };
+
+function useReveal(skipped: boolean) {
+  const [stage, setStage] = useState(0);
+
+  useEffect(() => {
+    if (skipped) {
+      setStage(STAGE.DONE);
+      return;
+    }
+    const timers = STAGE_DELAYS.map((delay, i) =>
+      setTimeout(() => setStage(i + 1), delay),
+    );
+    return () => timers.forEach(clearTimeout);
+  }, [skipped]);
+
+  return stage;
+}
 
 export default function ResultsScreen() {
-  const { palette, accent } = useTheme();
+  const { palette, accent, isDark } = useTheme();
   const playerName = useSettingsStore((s) => s.playerName);
   const matchResult = useGameStore((s) => s.matchResult);
-  const board = useGameStore((s) => s.board);
   const role = useGameStore((s) => s.role);
   const remotePlayerName = useGameStore((s) => s.remotePlayerName);
   const eloChange = useGameStore((s) => s.eloChange);
   const newAchievements = useGameStore((s) => s.newAchievements);
+  const newRecords = useGameStore((s) => s.newRecords);
   const rematch = useGameStore((s) => s.rematch);
   const cleanup = useGameStore((s) => s.cleanup);
 
-  const [bestPossible, setBestPossible] = useState<string | null>(null);
+  const [skipped, setSkipped] = useState(false);
+  const stage = useReveal(skipped);
+  const skip = stage >= STAGE.DONE;
 
-  useEffect(() => {
-    let cancelled = false;
-    if (!board) return;
-    loadDictionary().then((dict) => {
-      const words = solveBoard(board, dict);
-      const longest = words.reduce((a, b) => (b.length > a.length ? b : a), '');
-      if (!cancelled) setBestPossible(longest || null);
-    });
-    return () => {
-      cancelled = true;
+  const [tab, setTab] = useState<'local' | 'remote'>('local');
+
+  const localName = playerName;
+  const remoteName = remotePlayerName ?? 'Tegenstander';
+
+  const view = useMemo(() => {
+    if (!matchResult) return null;
+    const isPlayer1Local = role === 'host';
+    const localResult = isPlayer1Local ? matchResult.player1 : matchResult.player2;
+    const remoteResult = isPlayer1Local ? matchResult.player2 : matchResult.player1;
+
+    const localRaw = localResult.rawWords;
+    const remoteRaw = remoteResult.rawWords;
+
+    return {
+      localScore: localResult.score,
+      remoteScore: remoteResult.score,
+      localWon: matchResult.winnerId === localResult.playerId,
+      isDraw: matchResult.isDraw,
+      localSummary: buildPlayerSummary(localRaw, remoteRaw),
+      remoteSummary: buildPlayerSummary(remoteRaw, localRaw),
+      localRows: buildWordRows(localRaw, remoteRaw),
+      remoteRows: buildWordRows(remoteRaw, localRaw),
     };
-  }, [board]);
+  }, [matchResult, role]);
 
-  if (!matchResult) {
+  if (!matchResult || !view) {
     return (
       <Screen title="Resultaten">
         <Text style={{ color: palette.textSecondary }}>Resultaten laden...</Text>
@@ -48,20 +82,12 @@ export default function ResultsScreen() {
     );
   }
 
-  const isPlayer1Local = role === 'host';
-  const localResult = isPlayer1Local ? matchResult.player1 : matchResult.player2;
-  const remoteResult = isPlayer1Local ? matchResult.player2 : matchResult.player1;
-
-  const localWon = matchResult.winnerId === localResult.playerId;
-  const isDraw = matchResult.isDraw;
-
-  const localUnique = matchResult.uniqueWords.filter(
-    (u) => u.playerId === localResult.playerId,
-  );
-
-  const headline = isDraw ? 'Gelijkspel!' : localWon ? 'Gewonnen!' : 'Verloren';
-  const emoji = isDraw ? '🤝' : localWon ? '🏆' : '💪';
-  const headlineColor = isDraw ? palette.textSecondary : localWon ? accent.primary : palette.error;
+  const headline = view.isDraw
+    ? 'Gelijkspel'
+    : view.localWon
+      ? `${localName} wint!`
+      : `${remoteName} wint!`;
+  const emoji = view.isDraw ? '🤝' : '🏆';
 
   const handleRematch = async () => {
     if (role === 'host') {
@@ -75,243 +101,487 @@ export default function ResultsScreen() {
     router.replace('/');
   };
 
+  const activeRows = tab === 'local' ? view.localRows : view.remoteRows;
+
   return (
     <Screen>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
-        <Animated.View entering={ZoomIn.springify().damping(12)} style={styles.winnerBanner}>
-          <Text style={styles.emoji}>{emoji}</Text>
-          <Text style={[styles.winnerText, { color: headlineColor }]}>{headline}</Text>
-          {eloChange !== null && (
-            <View style={[styles.eloPill, { backgroundColor: eloChange >= 0 ? accent.light : palette.surface }]}>
-              <Text style={[styles.eloChange, { color: eloChange >= 0 ? accent.dark : palette.error }]}>
-                {eloChange >= 0 ? '+' : ''}{eloChange} ELO
-              </Text>
-            </View>
+      <Pressable style={styles.flex} onPress={() => setSkipped(true)}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scroll}
+        >
+          {/* Kaart 1 - Winnaar */}
+          {stage >= STAGE.WINNER && (
+            <Animated.View
+              entering={ZoomIn.springify().damping(13)}
+              style={[styles.winnerCard, shadows.md, { backgroundColor: accent.primary }]}
+            >
+              <Text style={styles.winnerEmoji}>{emoji}</Text>
+              <Text style={styles.winnerText}>{headline}</Text>
+              <View style={styles.winnerScoreRow}>
+                <CountUp value={view.localScore} skip={skip} style={styles.winnerScore} />
+                <Text style={styles.winnerScoreDash}>–</Text>
+                <CountUp value={view.remoteScore} skip={skip} style={styles.winnerScore} />
+              </View>
+              {eloChange !== null && (
+                <View style={styles.eloPill}>
+                  <Text style={[styles.eloText, { color: accent.dark }]}>
+                    {eloChange >= 0 ? '+' : ''}{eloChange} ELO
+                  </Text>
+                </View>
+              )}
+            </Animated.View>
           )}
-        </Animated.View>
 
-        <Animated.View entering={FadeInDown.delay(150).springify()}>
-          <View style={[styles.scoreboard, shadows.md, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <View style={styles.scoreSide}>
-              <Text style={[styles.scoreName, { color: palette.textSecondary }]} numberOfLines={1}>
-                {playerName}
-              </Text>
-              <Text style={[styles.scoreValue, { color: localWon ? accent.primary : palette.text }]}>
-                {localResult.score}
-              </Text>
-            </View>
-            <Text style={[styles.vs, { color: palette.textMuted }]}>VS</Text>
-            <View style={styles.scoreSide}>
-              <Text style={[styles.scoreName, { color: palette.textSecondary }]} numberOfLines={1}>
-                {remotePlayerName ?? 'Tegenstander'}
-              </Text>
-              <Text style={[styles.scoreValue, { color: !localWon && !isDraw ? palette.error : palette.text }]}>
-                {remoteResult.score}
-              </Text>
-            </View>
-          </View>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(250).springify()}>
-          <Card title="Statistieken">
-            <StatRow label="Totaal woorden" value={matchResult.totalWords} />
-            <StatRow label="Langste woord (gespeeld)" value={matchResult.longestWord || '-'} />
-            <StatRow
-              label="Hoogst scorend woord"
-              value={
-                matchResult.highestScoringWord.word
-                  ? `${matchResult.highestScoringWord.word} (${matchResult.highestScoringWord.points})`
-                  : '-'
-              }
-            />
-            <StatRow label="Jouw unieke woorden" value={localUnique.length} highlight />
-            <StatRow label="Dubbele woorden" value={matchResult.sharedWords.length} />
-          </Card>
-        </Animated.View>
-
-        <Animated.View entering={FadeInDown.delay(350).springify()}>
-          <View style={[styles.bestCard, { backgroundColor: accent.primary }]}>
-            <Text style={styles.bestLabel}>LANGST MOGELIJKE WOORD</Text>
-            <Text style={styles.bestWord}>
-              {bestPossible ? bestPossible.toUpperCase() : '…'}
-            </Text>
-            {bestPossible && (
-              <Text style={styles.bestSub}>{bestPossible.length} letters op dit bord</Text>
-            )}
-          </View>
-        </Animated.View>
-
-        {localUnique.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(450).springify()}>
-            <Card title="Jouw unieke woorden">
-              <FlatList
-                data={localUnique}
-                horizontal
-                keyExtractor={(item) => item.word}
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.chipRow}
-                renderItem={({ item }) => (
-                  <View style={[styles.chip, { backgroundColor: accent.light }]}>
-                    <Text style={[styles.chipText, { color: accent.dark }]}>
-                      {item.word} +{item.points}
-                    </Text>
-                  </View>
-                )}
+          {/* Kaart 2 - Samenvatting */}
+          {stage >= STAGE.SUMMARY && (
+            <Animated.View entering={FadeInDown.springify()} style={styles.summaryRow}>
+              <SummaryColumn
+                name={localName}
+                highlight
+                accentColor={accent.primary}
+                palette={palette}
+                summary={view.localSummary}
+                skip={skip}
               />
-            </Card>
-          </Animated.View>
-        )}
+              <SummaryColumn
+                name={remoteName}
+                accentColor={palette.text}
+                palette={palette}
+                summary={view.remoteSummary}
+                skip={skip}
+              />
+            </Animated.View>
+          )}
 
-        {matchResult.sharedWords.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(550).springify()}>
-            <Card title="Dubbele woorden (0 punten)">
-              <Text style={[styles.wordLine, { color: palette.textSecondary }]}>
-                {matchResult.sharedWords.join(', ')}
-              </Text>
-            </Card>
-          </Animated.View>
-        )}
+          {/* Kaart 3 - Woorden */}
+          {stage >= STAGE.WORDS && (
+            <Animated.View
+              entering={FadeInDown.springify()}
+              style={[styles.card, shadows.sm, { backgroundColor: palette.surface, borderColor: palette.border }]}
+            >
+              <View style={[styles.tabs, { backgroundColor: palette.background }]}>
+                <TabButton
+                  label={localName}
+                  active={tab === 'local'}
+                  onPress={() => setTab('local')}
+                  accent={accent.primary}
+                  palette={palette}
+                />
+                <TabButton
+                  label={remoteName}
+                  active={tab === 'remote'}
+                  onPress={() => setTab('remote')}
+                  accent={accent.primary}
+                  palette={palette}
+                />
+              </View>
 
-        {newAchievements.length > 0 && (
-          <Animated.View entering={FadeInDown.delay(650).springify()}>
-            <Card title="Nieuwe prestaties!">
-              {newAchievements.map((id) => {
+              <View style={styles.wordList}>
+                {activeRows.length === 0 ? (
+                  <Text style={[styles.emptyWords, { color: palette.textMuted }]}>
+                    Geen woorden gevonden
+                  </Text>
+                ) : (
+                  activeRows.map((row, index) => (
+                    <WordRowItem
+                      key={`${tab}-${row.word}`}
+                      row={row}
+                      index={index}
+                      skip={skip}
+                      palette={palette}
+                      isDark={isDark}
+                    />
+                  ))
+                )}
+              </View>
+            </Animated.View>
+          )}
+
+          {/* Kaart 4 - Nieuwe records */}
+          {stage >= STAGE.RECORDS && newRecords.length > 0 && (
+            <Animated.View
+              entering={FadeInDown.springify()}
+              style={[styles.card, shadows.sm, { backgroundColor: palette.surface, borderColor: accent.primary, borderWidth: 2 }]}
+            >
+              <Text style={[styles.cardTitle, { color: palette.text }]}>⭐ Nieuw persoonlijk record</Text>
+              {newRecords.map((rec) => (
+                <View key={rec.id} style={styles.recordRow}>
+                  <Text style={styles.recordIcon}>{rec.icon}</Text>
+                  <View style={styles.recordText}>
+                    <Text style={[styles.recordTitle, { color: palette.text }]}>{rec.title}</Text>
+                    <Text style={[styles.recordValue, { color: accent.primary }]}>{rec.value}</Text>
+                  </View>
+                </View>
+              ))}
+            </Animated.View>
+          )}
+
+          {/* Kaart 5 - Achievements */}
+          {stage >= STAGE.ACHIEVEMENTS && newAchievements.length > 0 && (
+            <Animated.View
+              entering={FadeInDown.springify()}
+              style={[styles.card, shadows.sm, { backgroundColor: palette.surface, borderColor: palette.border }]}
+            >
+              <Text style={[styles.cardTitle, { color: palette.text }]}>Nieuwe prestaties</Text>
+              {newAchievements.map((id, i) => {
                 const achievement = getAchievementById(id);
-                return achievement ? (
-                  <View key={id} style={styles.achievement}>
-                    <Text style={styles.achievementIcon}>{achievement.icon}</Text>
-                    <View style={styles.achievementText}>
-                      <Text style={[styles.achievementTitle, { color: palette.text }]}>
-                        {achievement.title}
-                      </Text>
-                      <Text style={[styles.achievementDesc, { color: palette.textSecondary }]}>
+                if (!achievement) return null;
+                return (
+                  <Animated.View
+                    key={id}
+                    entering={FadeInDown.delay(i * 120).springify()}
+                    style={styles.recordRow}
+                  >
+                    <Text style={styles.recordIcon}>🏅</Text>
+                    <View style={styles.recordText}>
+                      <Text style={[styles.recordTitle, { color: palette.text }]}>{achievement.title}</Text>
+                      <Text style={[styles.recordValue, { color: palette.textSecondary }]}>
                         {achievement.description}
                       </Text>
                     </View>
-                  </View>
-                ) : null;
+                  </Animated.View>
+                );
               })}
-            </Card>
-          </Animated.View>
-        )}
+            </Animated.View>
+          )}
 
-        <View style={styles.actions}>
+          {!skip && (
+            <Animated.Text entering={FadeIn} style={[styles.skipHint, { color: palette.textMuted }]}>
+              Tik om over te slaan
+            </Animated.Text>
+          )}
+        </ScrollView>
+
+        {/* Kaart 6 - Acties (sticky, duimbereik) */}
+        <View style={styles.footer}>
           {role === 'host' && <Button title="Nog een ronde" onPress={handleRematch} />}
-          <Button title="Terug naar menu" variant="secondary" onPress={handleMenu} />
+          <Button title="Terug naar hoofdmenu" variant="secondary" onPress={handleMenu} />
         </View>
-      </ScrollView>
+      </Pressable>
     </Screen>
   );
 }
 
+function SummaryColumn({
+  name,
+  summary,
+  highlight,
+  accentColor,
+  palette,
+  skip,
+}: {
+  name: string;
+  summary: ReturnType<typeof buildPlayerSummary>;
+  highlight?: boolean;
+  accentColor: string;
+  palette: ReturnType<typeof useTheme>['palette'];
+  skip: boolean;
+}) {
+  return (
+    <View style={[styles.summaryCol, shadows.sm, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+      <Text style={[styles.summaryName, { color: accentColor }]} numberOfLines={1}>
+        {name}
+      </Text>
+      <CountUp value={summary.score} skip={skip} style={[styles.summaryScore, { color: palette.text }]} />
+      <Text style={[styles.summaryScoreLabel, { color: palette.textMuted }]}>punten</Text>
+
+      <View style={[styles.summaryDivider, { backgroundColor: palette.border }]} />
+
+      <SummaryStat label="Woorden" value={String(summary.totalWords)} palette={palette} />
+      <SummaryStat label="Uniek" value={String(summary.uniqueWords)} palette={palette} />
+      <SummaryStat label="Dubbel" value={String(summary.duplicateWords)} palette={palette} />
+      <SummaryStat label="Langste" value={summary.longestWord ? summary.longestWord.toUpperCase() : '-'} palette={palette} />
+      <SummaryStat
+        label="Beste"
+        value={summary.highestScoringWord.word ? `${summary.highestScoringWord.word.toUpperCase()} +${summary.highestScoringWord.points}` : '-'}
+        palette={palette}
+      />
+    </View>
+  );
+}
+
+function SummaryStat({
+  label,
+  value,
+  palette,
+}: {
+  label: string;
+  value: string;
+  palette: ReturnType<typeof useTheme>['palette'];
+}) {
+  return (
+    <View style={styles.summaryStat}>
+      <Text style={[styles.summaryStatLabel, { color: palette.textSecondary }]}>{label}</Text>
+      <Text style={[styles.summaryStatValue, { color: palette.text }]} numberOfLines={1}>
+        {value}
+      </Text>
+    </View>
+  );
+}
+
+function TabButton({
+  label,
+  active,
+  onPress,
+  accent,
+  palette,
+}: {
+  label: string;
+  active: boolean;
+  onPress: () => void;
+  accent: string;
+  palette: ReturnType<typeof useTheme>['palette'];
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={[styles.tab, active && { backgroundColor: palette.surface, ...shadows.sm }]}
+    >
+      <Text
+        style={[styles.tabText, { color: active ? accent : palette.textSecondary }]}
+        numberOfLines={1}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+function WordRowItem({
+  row,
+  index,
+  skip,
+  palette,
+  isDark,
+}: {
+  row: WordRow;
+  index: number;
+  skip: boolean;
+  palette: ReturnType<typeof useTheme>['palette'];
+  isDark: boolean;
+}) {
+  const isUnique = row.status === 'unique';
+  const uniqueColor = palette.success;
+  const dupBg = isDark ? 'rgba(148,163,184,0.15)' : 'rgba(148,163,184,0.18)';
+
+  return (
+    <Animated.View
+      entering={skip ? undefined : FadeIn.delay(Math.min(index * 40, 800))}
+      style={styles.wordRow}
+    >
+      <Text style={[styles.word, { color: isUnique ? palette.text : palette.textMuted }]} numberOfLines={1}>
+        {row.word.toUpperCase()}
+      </Text>
+      <Text style={[styles.wordPoints, { color: isUnique ? uniqueColor : palette.textMuted }]}>
+        {isUnique ? `+${row.points}` : '0'}
+      </Text>
+      <View
+        style={[
+          styles.statusPill,
+          { backgroundColor: isUnique ? (isDark ? 'rgba(52,211,153,0.18)' : 'rgba(16,185,129,0.15)') : dupBg },
+        ]}
+      >
+        <Text style={[styles.statusText, { color: isUnique ? uniqueColor : palette.textSecondary }]}>
+          {isUnique ? '🟢 Uniek' : '⚪ Dubbel'}
+        </Text>
+      </View>
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
+  flex: {
+    flex: 1,
+  },
   scroll: {
     gap: spacing.md,
-    paddingBottom: spacing.xxl,
     paddingTop: spacing.sm,
+    paddingBottom: spacing.md,
   },
-  winnerBanner: {
+  // Winner
+  winnerCard: {
+    borderRadius: radius.xxl,
+    padding: spacing.xl,
     alignItems: 'center',
-    paddingVertical: spacing.md,
     gap: spacing.xs,
   },
-  emoji: {
-    fontSize: 64,
+  winnerEmoji: {
+    fontSize: 56,
   },
   winnerText: {
-    ...typography.hero,
+    fontSize: 28,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textAlign: 'center',
   },
-  eloPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
-    borderRadius: radius.full,
+  winnerScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     marginTop: spacing.xs,
   },
-  eloChange: {
-    ...typography.bodyBold,
-  },
-  scoreboard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    borderRadius: radius.xxl,
-    borderWidth: 1,
-    padding: spacing.lg,
-  },
-  scoreSide: {
-    flex: 1,
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  scoreName: {
-    ...typography.caption,
-    fontWeight: '600',
-  },
-  scoreValue: {
+  winnerScore: {
     fontSize: 44,
     fontWeight: '900',
-  },
-  vs: {
-    ...typography.bodyBold,
-    paddingHorizontal: spacing.md,
-  },
-  bestCard: {
-    borderRadius: radius.xxl,
-    padding: spacing.lg,
-    alignItems: 'center',
-    gap: spacing.xs,
-  },
-  bestLabel: {
-    ...typography.small,
-    fontWeight: '800',
-    letterSpacing: 1.5,
-    color: 'rgba(255,255,255,0.8)',
-  },
-  bestWord: {
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: 2,
     color: '#FFFFFF',
   },
-  bestSub: {
-    ...typography.caption,
-    color: 'rgba(255,255,255,0.85)',
+  winnerScoreDash: {
+    fontSize: 32,
+    fontWeight: '700',
+    color: 'rgba(255,255,255,0.7)',
   },
-  chipRow: {
-    gap: spacing.sm,
-  },
-  chip: {
+  eloPill: {
+    marginTop: spacing.sm,
+    backgroundColor: '#FFFFFF',
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs,
     borderRadius: radius.full,
   },
-  chipText: {
+  eloText: {
+    ...typography.bodyBold,
+  },
+  // Summary
+  summaryRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  summaryCol: {
+    flex: 1,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    alignItems: 'center',
+    gap: 2,
+  },
+  summaryName: {
+    ...typography.bodyBold,
+    marginBottom: spacing.xs,
+  },
+  summaryScore: {
+    fontSize: 36,
+    fontWeight: '900',
+  },
+  summaryScoreLabel: {
+    ...typography.small,
+    marginTop: -2,
+  },
+  summaryDivider: {
+    height: 1,
+    alignSelf: 'stretch',
+    marginVertical: spacing.sm,
+  },
+  summaryStat: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignSelf: 'stretch',
+    alignItems: 'center',
+    paddingVertical: 3,
+    gap: spacing.sm,
+  },
+  summaryStatLabel: {
     ...typography.caption,
-    fontWeight: '600',
   },
-  wordLine: {
+  summaryStatValue: {
+    ...typography.caption,
+    fontWeight: '700',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+  // Generic card
+  card: {
+    borderRadius: radius.xl,
+    borderWidth: 1,
+    padding: spacing.md,
+    gap: spacing.sm,
+  },
+  cardTitle: {
+    ...typography.subheading,
+    marginBottom: spacing.xs,
+  },
+  // Tabs
+  tabs: {
+    flexDirection: 'row',
+    borderRadius: radius.full,
+    padding: 4,
+    gap: 4,
+  },
+  tab: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  tabText: {
+    ...typography.bodyBold,
+    fontSize: 15,
+  },
+  // Words
+  wordList: {
+    gap: spacing.xs,
+  },
+  wordRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: 44,
+    gap: spacing.sm,
+  },
+  word: {
+    flex: 1,
+    ...typography.bodyBold,
+    letterSpacing: 1,
+  },
+  wordPoints: {
+    ...typography.bodyBold,
+    minWidth: 36,
+    textAlign: 'right',
+  },
+  statusPill: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+    borderRadius: radius.full,
+    minWidth: 84,
+    alignItems: 'center',
+  },
+  statusText: {
+    ...typography.small,
+    fontWeight: '700',
+  },
+  emptyWords: {
     ...typography.body,
+    textAlign: 'center',
+    paddingVertical: spacing.lg,
   },
-  achievement: {
+  // Records / achievements
+  recordRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  achievementIcon: {
-    fontSize: 32,
+  recordIcon: {
+    fontSize: 30,
   },
-  achievementText: {
+  recordText: {
     flex: 1,
   },
-  achievementTitle: {
+  recordTitle: {
     ...typography.bodyBold,
   },
-  achievementDesc: {
+  recordValue: {
     ...typography.caption,
+    fontWeight: '600',
   },
-  actions: {
-    gap: spacing.md,
-    marginTop: spacing.md,
+  skipHint: {
+    ...typography.small,
+    textAlign: 'center',
+    paddingVertical: spacing.sm,
+  },
+  // Footer
+  footer: {
+    gap: spacing.sm,
+    paddingTop: spacing.sm,
   },
 });

@@ -17,6 +17,7 @@ import {
 import type { MatchResult, GameSettings } from '../../core/game/types';
 import { calculateEloChange, DEFAULT_ELO } from '../../core/elo/elo';
 import { evaluateAchievements } from '../../core/achievements/achievements';
+import { detectNewRecords, type NewRecord } from '../../core/game/records';
 
 function generateId(): string {
   return Crypto.randomUUID();
@@ -148,6 +149,7 @@ export interface SaveMatchOutput {
   localEloChange: number;
   newLocalElo: number;
   newAchievements: string[];
+  newRecords: NewRecord[];
 }
 
 export async function saveMatch(input: SaveMatchInput): Promise<SaveMatchOutput> {
@@ -156,6 +158,7 @@ export async function saveMatch(input: SaveMatchInput): Promise<SaveMatchOutput>
   const matchId = generateId();
 
   const localProfile = await getProfile(input.localProfileId);
+  const statsBefore = await getPlayerStats(input.localProfileId);
   const remoteProfile = await getOrCreateProfile(input.remotePlayerName);
 
   const p1Id = input.isLocalPlayer1 ? input.localProfileId : remoteProfile.id;
@@ -261,11 +264,29 @@ export async function saveMatch(input: SaveMatchInput): Promise<SaveMatchOutput>
     });
   }
 
+  const newRecords = detectNewRecords(
+    {
+      totalMatches: statsBefore?.totalMatches ?? 0,
+      highestScore: statsBefore?.highestScore ?? 0,
+      mostWords: statsBefore?.mostWords ?? 0,
+      longestWordLength: statsBefore?.longestWord?.length ?? 0,
+      biggestWin: statsBefore?.biggestWin ?? 0,
+    },
+    {
+      score: localScore,
+      wordCount: localWords.length,
+      longestWord: localWords.reduce((l, w) => (w.length > l.length ? w : l), ''),
+      won: localResult === 'win',
+      winMargin: localScore - remoteScore,
+    },
+  );
+
   return {
     matchId,
     localEloChange: localElo.change,
     newLocalElo: localElo.newRating,
     newAchievements,
+    newRecords,
   };
 }
 

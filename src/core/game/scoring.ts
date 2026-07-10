@@ -1,9 +1,8 @@
 import type { FoundWord, MatchResult, PlayerWords } from './types';
+import { calculateWordPoints } from './results';
 
 export function basePointsForWord(word: string): number {
-  const len = word.length;
-  if (len < 3) return 0;
-  return len - 2;
+  return calculateWordPoints(word);
 }
 
 export function computeMatchResult(

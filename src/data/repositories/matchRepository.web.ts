@@ -11,6 +11,7 @@ import type {
 import type { MatchResult, GameSettings } from '../../core/game/types';
 import { calculateEloChange, DEFAULT_ELO } from '../../core/elo/elo';
 import { evaluateAchievements } from '../../core/achievements/achievements';
+import { detectNewRecords, type NewRecord } from '../../core/game/records';
 
 const STORAGE_KEY = 'boggle-duel-web-data';
 
@@ -186,6 +187,7 @@ export interface SaveMatchOutput {
   localEloChange: number;
   newLocalElo: number;
   newAchievements: string[];
+  newRecords: NewRecord[];
 }
 
 export async function saveMatch(input: SaveMatchInput): Promise<SaveMatchOutput> {
@@ -223,6 +225,15 @@ export async function saveMatch(input: SaveMatchInput): Promise<SaveMatchOutput>
 
   const localElo = calculateEloChange(localEloBefore, remoteEloBefore, localResult);
   const remoteElo = calculateEloChange(remoteEloBefore, localEloBefore, remoteResult as 'win' | 'loss' | 'draw');
+
+  const statsBefore = store.playerStats.find((s) => s.profileId === input.localProfileId);
+  const recordStatsBefore = {
+    totalMatches: statsBefore?.totalMatches ?? 0,
+    highestScore: statsBefore?.highestScore ?? 0,
+    mostWords: statsBefore?.mostWords ?? 0,
+    longestWordLength: statsBefore?.longestWord?.length ?? 0,
+    biggestWin: statsBefore?.biggestWin ?? 0,
+  };
 
   store.matches.push({
     id: matchId,
@@ -305,11 +316,20 @@ export async function saveMatch(input: SaveMatchInput): Promise<SaveMatchOutput>
 
   await saveStore(store);
 
+  const newRecords = detectNewRecords(recordStatsBefore, {
+    score: localScore,
+    wordCount: localWords.length,
+    longestWord: localWords.reduce((l, w) => (w.length > l.length ? w : l), ''),
+    won: localResult === 'win',
+    winMargin: localScore - remoteScore,
+  });
+
   return {
     matchId,
     localEloChange: localElo.change,
     newLocalElo: localElo.newRating,
     newAchievements,
+    newRecords,
   };
 }
 

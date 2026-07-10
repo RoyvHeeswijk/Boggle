@@ -15,6 +15,7 @@ import { loadDictionary } from '../core/dictionary/dictionary';
 import { computeMatchResult } from '../core/game/scoring';
 import { saveMatch } from '../data/repositories/matchRepository';
 import { getOrCreateProfile } from '../data/repositories/matchRepository';
+import type { NewRecord } from '../core/game/records';
 
 interface GameStore {
   transport: Transport | null;
@@ -40,6 +41,7 @@ interface GameStore {
   matchResult: MatchResult | null;
   eloChange: number | null;
   newAchievements: string[];
+  newRecords: NewRecord[];
   error: string | null;
 
   initHost: (
@@ -96,6 +98,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   matchResult: null,
   eloChange: null,
   newAchievements: [],
+  newRecords: [],
   error: null,
 
   initHost: async (playerName, playerId, settings, options = {}) => {
@@ -271,6 +274,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           matchResult: null,
           eloChange: null,
           newAchievements: [],
+          newRecords: [],
           secondsRemaining: state.settings.durationSeconds,
         });
         break;
@@ -371,6 +375,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       matchResult: null,
       eloChange: null,
       newAchievements: [],
+      newRecords: [],
       secondsRemaining: settings.durationSeconds,
     });
   },
@@ -409,6 +414,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       matchResult: null,
       eloChange: null,
       newAchievements: [],
+      newRecords: [],
       error: null,
     });
   },
@@ -435,6 +441,7 @@ async function finalizeMatch(state: ReturnType<typeof useGameStore.getState>) {
 
   let eloChange = 0;
   let newAchievements: string[] = [];
+  let newRecords: NewRecord[] = [];
 
   try {
     const profile = await getOrCreateProfile(state.localPlayerName);
@@ -451,6 +458,7 @@ async function finalizeMatch(state: ReturnType<typeof useGameStore.getState>) {
     });
     eloChange = saveResult.localEloChange;
     newAchievements = saveResult.newAchievements;
+    newRecords = saveResult.newRecords;
   } catch (e) {
     console.warn('Failed to save match:', e);
   }
@@ -460,6 +468,7 @@ async function finalizeMatch(state: ReturnType<typeof useGameStore.getState>) {
     phase: 'results',
     eloChange,
     newAchievements,
+    newRecords,
   });
 }
 
