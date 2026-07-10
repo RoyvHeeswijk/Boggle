@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, View, ViewProps } from 'react-native';
 import { useTheme } from '../hooks/useTheme';
-import { radius, spacing, typography } from '../theme';
+import { radius, spacing, typography, shadows } from '../theme';
 
 interface CardProps extends ViewProps {
   title?: string;
@@ -13,7 +13,12 @@ export function Card({ title, subtitle, children, style, ...props }: CardProps) 
 
   return (
     <View
-      style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }, style]}
+      style={[
+        styles.card,
+        shadows.sm,
+        { backgroundColor: palette.surface, borderColor: palette.border },
+        style,
+      ]}
       {...props}
     >
       {title && <Text style={[styles.title, { color: palette.text }]}>{title}</Text>}
@@ -51,7 +56,7 @@ export function StatRow({ label, value, highlight }: StatRowProps) {
 
 const styles = StyleSheet.create({
   card: {
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     padding: spacing.lg,
     borderWidth: 1,
     gap: spacing.sm,

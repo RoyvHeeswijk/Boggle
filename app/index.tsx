@@ -4,7 +4,7 @@ import { router } from 'expo-router';
 import { Screen } from '@/src/ui/components/Screen';
 import { Button } from '@/src/ui/components/Button';
 import { useTheme } from '@/src/ui/hooks/useTheme';
-import { spacing, typography } from '@/src/ui/theme';
+import { spacing, typography, radius, shadows } from '@/src/ui/theme';
 import { useSettingsStore } from '@/src/state/settingsStore';
 
 export default function HomeScreen() {
@@ -14,10 +14,12 @@ export default function HomeScreen() {
   return (
     <Screen>
       <View style={styles.hero}>
-        <Text style={[styles.logo, { color: accent.primary }]}>Boggle</Text>
+        <View style={[styles.logoBadge, { backgroundColor: accent.light }]}>
+          <Text style={[styles.logo, { color: accent.primary }]}>Boggle</Text>
+        </View>
         <Text style={[styles.logoSub, { color: palette.text }]}>Duel</Text>
         <Text style={[styles.greeting, { color: palette.textSecondary }]}>
-          Hallo, {playerName}
+          Hallo, {playerName} 👋
         </Text>
       </View>
 
@@ -27,13 +29,14 @@ export default function HomeScreen() {
       </View>
 
       <View style={styles.footer}>
-        <Pressable onPress={() => router.push('/profile')} style={styles.footerLink}>
-          <Text style={[styles.footerText, { color: palette.textSecondary }]}>
-            Profiel & Statistieken
-          </Text>
+        <Pressable
+          onPress={() => router.push('/profile')}
+          style={[styles.footerCard, shadows.sm, { backgroundColor: palette.surface, borderColor: palette.border }]}
+        >
+          <Text style={[styles.footerText, { color: palette.text }]}>Profiel & Statistieken</Text>
         </Pressable>
         <Pressable onPress={() => router.push('/settings')} style={styles.footerLink}>
-          <Text style={[styles.footerText, { color: palette.textMuted }]}>Instellingen</Text>
+          <Text style={[styles.footerTextMuted, { color: palette.textMuted }]}>Instellingen</Text>
         </Pressable>
       </View>
     </Screen>
@@ -45,19 +48,21 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    gap: spacing.xs,
+    gap: spacing.sm,
+  },
+  logoBadge: {
+    paddingHorizontal: spacing.xl,
+    paddingVertical: spacing.md,
+    borderRadius: radius.xxl,
   },
   logo: {
-    fontSize: 56,
-    fontWeight: '800',
-    letterSpacing: -2,
+    ...typography.hero,
   },
   logoSub: {
-    fontSize: 32,
-    fontWeight: '300',
-    letterSpacing: 8,
+    fontSize: 28,
+    fontWeight: '600',
+    letterSpacing: 10,
     textTransform: 'uppercase',
-    marginTop: -8,
   },
   greeting: {
     ...typography.body,
@@ -72,10 +77,19 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     paddingBottom: spacing.md,
   },
+  footerCard: {
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xl,
+    borderRadius: radius.xl,
+    borderWidth: 1,
+  },
   footerLink: {
     padding: spacing.sm,
   },
   footerText: {
+    ...typography.bodyBold,
+  },
+  footerTextMuted: {
     ...typography.caption,
   },
 });

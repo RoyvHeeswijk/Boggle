@@ -23,7 +23,7 @@ interface SettingsState {
 export const useSettingsStore = create<SettingsState>((set, get) => ({
   playerName: 'Speler',
   playerId: null,
-  accent: 'green',
+  accent: 'blue',
   themeMode: 'system',
   useMockTransport: __DEV__,
   hydrated: false,
@@ -56,7 +56,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
         set({
           playerName: data.playerName ?? 'Speler',
           playerId: data.playerId ?? null,
-          accent: data.accent ?? 'green',
+          accent: data.accent ?? 'blue',
           themeMode: data.themeMode ?? 'system',
           useMockTransport: data.useMockTransport ?? __DEV__,
           hydrated: true,

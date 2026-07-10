@@ -177,21 +177,21 @@ const styles = StyleSheet.create({
   },
   codeCard: {
     marginTop: spacing.md,
-    padding: spacing.lg,
-    borderRadius: radius.lg,
-    borderWidth: 1.5,
+    padding: spacing.xl,
+    borderRadius: radius.xxl,
+    borderWidth: 2,
     alignItems: 'center',
     gap: spacing.sm,
   },
   codeLabel: {
     ...typography.caption,
-    fontWeight: '600',
+    fontWeight: '700',
     textAlign: 'center',
   },
   codeValue: {
-    fontSize: 44,
-    fontWeight: '800',
-    letterSpacing: 8,
+    fontSize: 48,
+    fontWeight: '900',
+    letterSpacing: 10,
   },
   codeHint: {
     ...typography.small,

@@ -4,6 +4,7 @@ import {
   PressableProps,
   StyleSheet,
   Text,
+  View,
   ViewStyle,
   ActivityIndicator,
 } from 'react-native';
@@ -32,9 +33,20 @@ export function Button({
 
   const variantStyles: Record<ButtonVariant, ViewStyle> = {
     primary: { backgroundColor: accent.primary },
-    secondary: { backgroundColor: palette.surfaceElevated, borderWidth: 1, borderColor: palette.border },
+    secondary: {
+      backgroundColor: palette.surfaceElevated,
+      borderWidth: 2,
+      borderColor: palette.border,
+    },
     ghost: { backgroundColor: 'transparent' },
     danger: { backgroundColor: palette.error },
+  };
+
+  const shadowColors: Record<ButtonVariant, string> = {
+    primary: accent.dark,
+    secondary: palette.border,
+    ghost: 'transparent',
+    danger: '#B91C1C',
   };
 
   const textColors: Record<ButtonVariant, string> = {
@@ -44,33 +56,58 @@ export function Button({
     danger: '#FFFFFF',
   };
 
+  const isChunky = variant === 'primary' || variant === 'danger';
+
   return (
-    <Pressable
-      style={({ pressed }) => [
-        styles.button,
-        variantStyles[variant],
-        fullWidth && styles.fullWidth,
-        (disabled || loading) && styles.disabled,
-        pressed && styles.pressed,
-        style as ViewStyle,
-      ]}
-      disabled={disabled || loading}
-      {...props}
-    >
-      {loading ? (
-        <ActivityIndicator color={textColors[variant]} />
-      ) : (
-        <Text style={[styles.text, { color: textColors[variant] }]}>{title}</Text>
+    <View style={[fullWidth && styles.wrapper, fullWidth && styles.fullWidth]}>
+      {isChunky && !disabled && !loading && (
+        <View
+          style={[
+            styles.shadow,
+            { backgroundColor: shadowColors[variant] },
+            fullWidth && styles.fullWidth,
+          ]}
+        />
       )}
-    </Pressable>
+      <Pressable
+        style={({ pressed }) => [
+          styles.button,
+          variantStyles[variant],
+          fullWidth && styles.fullWidth,
+          (disabled || loading) && styles.disabled,
+          isChunky && pressed && styles.pressedChunky,
+          !isChunky && pressed && styles.pressedFlat,
+          style as ViewStyle,
+        ]}
+        disabled={disabled || loading}
+        {...props}
+      >
+        {loading ? (
+          <ActivityIndicator color={textColors[variant]} />
+        ) : (
+          <Text style={[styles.text, { color: textColors[variant] }]}>{title}</Text>
+        )}
+      </Pressable>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrapper: {
+    position: 'relative',
+  },
+  shadow: {
+    position: 'absolute',
+    bottom: -4,
+    left: 0,
+    right: 0,
+    height: 56,
+    borderRadius: radius.xl,
+  },
   button: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 56,
@@ -81,11 +118,15 @@ const styles = StyleSheet.create({
   disabled: {
     opacity: 0.5,
   },
-  pressed: {
+  pressedChunky: {
+    transform: [{ translateY: 3 }],
+  },
+  pressedFlat: {
     opacity: 0.85,
     transform: [{ scale: 0.98 }],
   },
   text: {
     ...typography.bodyBold,
+    fontSize: 17,
   },
 });

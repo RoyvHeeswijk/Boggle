@@ -25,6 +25,7 @@ interface GameStore {
   seed: number | null;
   matchId: string | null;
   startTimestamp: number | null;
+  endTimestamp: number | null;
   localPlayerId: string;
   localPlayerName: string;
   roomCode: string | null;
@@ -80,6 +81,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
   seed: null,
   matchId: null,
   startTimestamp: null,
+  endTimestamp: null,
   localPlayerId: '',
   localPlayerName: '',
   roomCode: null,
@@ -202,6 +204,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     const matchId = Crypto.randomUUID();
     const startTimestamp = Date.now() + 4000;
+    const endTimestamp = startTimestamp + settings.durationSeconds * 1000;
 
     await transport.send('start_game', {
       seed: finalSeed,
@@ -215,6 +218,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seed: finalSeed,
       matchId,
       startTimestamp,
+      endTimestamp,
       phase: 'countdown',
       foundWords: [],
       remoteWords: null,
@@ -260,6 +264,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
           seed: p.seed,
           matchId: p.matchId,
           startTimestamp: p.startTimestamp,
+          endTimestamp: p.startTimestamp + state.settings.durationSeconds * 1000,
           phase: 'countdown',
           foundWords: [],
           remoteWords: null,
@@ -299,15 +304,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
   },
 
   tickTimer: () => {
-    const { secondsRemaining, timerInterval, phase } = get();
-    if (phase !== 'playing') return;
+    const { endTimestamp, timerInterval, phase } = get();
+    if (phase !== 'playing' || !endTimestamp) return;
 
-    if (secondsRemaining <= 1) {
+    const remaining = Math.max(0, Math.round((endTimestamp - Date.now()) / 1000));
+
+    if (remaining <= 0) {
       if (timerInterval) clearInterval(timerInterval);
       set({ secondsRemaining: 0, timerInterval: null });
       get().endGame();
     } else {
-      set({ secondsRemaining: secondsRemaining - 1 });
+      set({ secondsRemaining: remaining });
     }
   },
 
@@ -343,6 +350,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     );
     const matchId = Crypto.randomUUID();
     const startTimestamp = Date.now() + 4000;
+    const endTimestamp = startTimestamp + settings.durationSeconds * 1000;
 
     await transport.send('rematch', {
       seed: finalSeed,
@@ -356,6 +364,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seed: finalSeed,
       matchId,
       startTimestamp,
+      endTimestamp,
       phase: 'countdown',
       foundWords: [],
       remoteWords: null,
@@ -387,6 +396,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
       seed: null,
       matchId: null,
       startTimestamp: null,
+      endTimestamp: null,
       roomCode: null,
       remotePlayerId: null,
       remotePlayerName: null,
@@ -457,11 +467,20 @@ export function startGameTimer() {
   const store = useGameStore.getState();
   if (store.timerInterval) clearInterval(store.timerInterval);
 
+  const endTimestamp = store.endTimestamp;
+  const initialRemaining = endTimestamp
+    ? Math.max(0, Math.round((endTimestamp - Date.now()) / 1000))
+    : store.secondsRemaining;
+
   const interval = setInterval(() => {
     useGameStore.getState().tickTimer();
-  }, 1000);
+  }, 250);
 
-  useGameStore.setState({ timerInterval: interval, phase: 'playing' });
+  useGameStore.setState({
+    timerInterval: interval,
+    phase: 'playing',
+    secondsRemaining: initialRemaining,
+  });
 }
 
 export function beginCountdown(onComplete: () => void) {

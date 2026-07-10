@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -10,7 +10,12 @@ import Animated, {
 import { useTheme } from '../hooks/useTheme';
 import { typography } from '../theme';
 
-const COUNTDOWN_STEPS = ['3', '2', '1', 'GO!'];
+const COUNTDOWN_STEPS = [
+  { text: '3', offsetMs: -3000 },
+  { text: '2', offsetMs: -2000 },
+  { text: '1', offsetMs: -1000 },
+  { text: 'GO!', offsetMs: 0 },
+];
 
 interface CountdownOverlayProps {
   startTimestamp: number;
@@ -25,13 +30,15 @@ export function CountdownOverlay({ startTimestamp, onComplete }: CountdownOverla
   const completedRef = useRef(false);
 
   useEffect(() => {
-    const delays = [0, 1000, 2000, 3000];
     const timers: ReturnType<typeof setTimeout>[] = [];
 
-    delays.forEach((delay, index) => {
+    COUNTDOWN_STEPS.forEach((step) => {
+      const fireAt = startTimestamp + step.offsetMs;
+      const delay = Math.max(0, fireAt - Date.now());
+
       timers.push(
         setTimeout(() => {
-          setDisplay(COUNTDOWN_STEPS[index]!);
+          setDisplay(step.text);
           scale.value = 0.5;
           opacity.value = 0;
           scale.value = withSequence(
@@ -40,11 +47,11 @@ export function CountdownOverlay({ startTimestamp, onComplete }: CountdownOverla
           );
           opacity.value = withTiming(1, { duration: 150 });
 
-          if (index === COUNTDOWN_STEPS.length - 1 && !completedRef.current) {
+          if (step.offsetMs === 0 && !completedRef.current) {
             completedRef.current = true;
-            setTimeout(onComplete, 800);
+            onComplete();
           }
-        }, Math.max(0, startTimestamp - Date.now()) + delay),
+        }, delay),
       );
     });
 

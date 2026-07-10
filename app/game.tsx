@@ -88,8 +88,8 @@ export default function GameScreen() {
         </View>
       </View>
 
-      <View style={styles.currentWord}>
-        <Text style={[styles.currentWordText, { color: palette.text }]}>
+      <View style={[styles.currentWord, { backgroundColor: accent.light }]}>
+        <Text style={[styles.currentWordText, { color: accent.dark }]}>
           {currentInput || ' '}
         </Text>
         {feedback && (
@@ -154,12 +154,16 @@ const styles = StyleSheet.create({
   },
   currentWord: {
     alignItems: 'center',
-    minHeight: 40,
-    marginBottom: spacing.sm,
+    minHeight: 48,
+    marginBottom: spacing.md,
+    paddingVertical: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    borderRadius: radius.xl,
   },
   currentWordText: {
     ...typography.heading,
-    letterSpacing: 4,
+    letterSpacing: 6,
+    fontWeight: '800',
   },
   feedback: {
     ...typography.caption,
@@ -167,10 +171,10 @@ const styles = StyleSheet.create({
   },
   wordList: {
     marginTop: spacing.lg,
-    borderRadius: radius.lg,
+    borderRadius: radius.xl,
     borderWidth: 1,
     padding: spacing.md,
-    maxHeight: 80,
+    maxHeight: 88,
   },
   wordListTitle: {
     ...typography.small,
@@ -181,7 +185,7 @@ const styles = StyleSheet.create({
   },
   wordChip: {
     paddingHorizontal: spacing.md,
-    paddingVertical: spacing.xs,
+    paddingVertical: spacing.sm,
     borderRadius: radius.full,
   },
   wordChipText: {
