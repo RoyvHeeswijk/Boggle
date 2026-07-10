@@ -68,7 +68,22 @@ scripts/              # build-dictionary.js
 De woordenlijst is afkomstig van [Stichting OpenTaal](https://opentaal.org) (BSD / CC BY 3.0).
 Bronvermelding staat in Instellingen → Woordenlijst.
 
-## Tech stack
+## Web deployment (Vercel)
+
+The app can be deployed as a static web version on Vercel:
+
+1. Import the GitHub repo at [vercel.com/new/import](https://vercel.com/new/import?s=https://github.com/RoyvHeeswijk/Boggle)
+2. Vercel auto-detects settings from `vercel.json` (build: `npm run build:web`, output: `dist`)
+3. Deploy
+
+Or via CLI after `vercel login`:
+
+```bash
+vercel deploy --prod
+```
+
+**Note:** The web version uses mock transport (no Multipeer). For real iPhone multiplayer, use the EAS iOS build.
+
 
 - Expo 57 + React Native + TypeScript
 - expo-router, Reanimated, Gesture Handler
